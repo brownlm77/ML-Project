@@ -1,0 +1,188 @@
+---
+title: "Machine Learning - Human Activity Recognition"
+author: "Larry Brown"
+date: "10/23/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(caret)
+```
+
+# Introduction
+
+This goal of this project is to use data from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants doing exercises and develop a model that predicts the manner in which the individual did the exercise (how well performed the exercise). Six participants performed one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions:
+
+     Class A - exactly according to the specification
+     Class B - throwing the elbows to the front 
+     Class C - lifting the dumbbell only halfway 
+     Class D - lowering the dumbbell only halfway
+     Class E - throwing the hips to the front
+
+## Data Preprocessing 
+
+The original data set consists of training set of 19,622 observations of 160 variables, requiring clean-up of not applicable data. A validation set of 20 observations and 160 is also available to validate the final prediction model. The first 7 columns of the data set contain information, not relevant to the accelerator data for predicting a model, for instance, the user name and time of day for collecting data. See table below. Furthermore, a large number of variables have missing data. If the number of N/A > 1000, the variable was removed from the data set. 
+
+```{r }
+
+training_set <- read.csv("data/pml-training.csv", na.strings=c("NA","#DIV/0!", " "))
+validation_set <- read.csv("data/pml-testing.csv", na.string=c("NA","#DIV/0!", " "))
+
+head(training_set[,1:7], 5)
+
+```
+
+
+```{r}
+# Identify columns with more than 1,000 N/A to drop 
+drop_cols <- names(training_set[ ,apply(is.na(training_set), 2, sum) > 1000 ])
+# Add first seven columns to names to drop
+drop_cols <- c(names(training_set[,1:7]), drop_cols)
+
+# Drop columns
+training_set <- subset(training_set, select = !(names(training_set) %in% drop_cols))
+validation_set <- subset(validation_set, select = !(names(validation_set) %in% drop_cols))
+
+```
+
+# Data Partitioning 
+
+The reduced data sets comprise 53 variables, for which the original data set was split into a 'training' and a 'testing' data set, using a 70% random split of the data.  The training set comprised 13,737 observations and the testing set compromised 5,885 observations. 
+
+```{r}
+
+set.seed(12345)
+
+inTrain <- createDataPartition(y=training_set$classe, p=0.70, list=FALSE)
+training <- training_set[inTrain, ]
+testing <- training_set[-inTrain, ]
+
+```
+
+## Model Development
+
+The model development looked at several classification approaches and evaluating the accuracy of each model against the partitioned testing data set.  The models under considerations:
+
+a) Basic Classification Tree
+b) Random Forest
+c) Booting
+
+Based on selecing the best model based on the accuracy against the testing set, further analysis was considered using Principal Component Analysis for generating a new subset of variable s(principal components) and to seeing if this approach improved the model. 
+
+### Basic Classifcation Tree
+
+The tuning variable for the Classification Tree is the complexity parameter, cp.  By default, the caret rpart method performed a 3-point grid search, with cp values of (0.0356, 0.0609, 0.1160) yielding an accuracy of (0.505, 0.418, 0.337), respectively. The model shows a increasing accuracy for decreasing complexity parameter.  With this information a classification tree was trained using cp grid values of (0, 0.001, 0.01). the best model is cp=0 with an accuracy of 0.937. 
+
+```{r}
+# Decision Tree with three complexity parameter values
+set.seed(358)
+modFit_ct = train(classe ~ ., data=training, method = "rpart")
+
+modFit_ct = train(classe ~ ., data=training, method = "rpart", 
+                  tuneGrid = data.frame(cp = c(0, 0.001, 0.01)))
+
+# Predict values based on best model and testing data set
+predict_ct <- predict(modFit_ct, newdata=testing, method="class")
+cm <- confusionMatrix(data=predict_ct, reference=as.factor(testing$classe))
+cm$overall["Accuracy"]
+cm$table
+
+```
+
+
+### Random Forest
+
+Next, the data was examined using a Random Forest classification algorithm with default training parameters. This model yielded a testing Accuracy of 0.995, with very few classification errors as shown in the confusion matrix. The plot of feature importance show that measurements from the *roll_belt*, *pitch_forearm*, and *yaw_belt* are most important in predicting the classification of exercising. 
+
+```{r}
+modFit_rf <- train(classe ~., method="rf", data=training)
+
+# Perform prediction
+predict_rf <- predict(modFit_rf, testing)
+cm_rf <- confusionMatrix(data=predict_rf, reference=as.factor(testing$classe))
+
+cm_rf$overall["Accuracy"]
+cm_rf$table
+
+```
+Confusion Matrix and Statistics
+
+          Reference
+Prediction    A    B    C    D    E
+         A 1673    5    0    0    0
+         B    1 1131    4    0    0
+         C    0    3 1019    8    2
+         D    0    0    3  955    1
+         E    0    0    0    1 1079
+
+Overall Statistics
+                                          
+               Accuracy : 0.9952  
+
+```{r}
+# Show top 10 features from Random Forest 
+feature_importance <- varImp(modFit_rf)
+plot(feature_importance, top=10)
+```
+
+
+## Stochatic Gradient Boosting
+
+The final classification model considered was stochastic gradient boosting, gbm. The overall classification accuracy was 0.961 on the testing set.  
+
+```{r}
+
+# Boosting classification model 
+modFit_gbm <- train(classe ~., method="gbm", data=training, verbose=FALSE)
+
+# Predict against testing set
+predict_gbm <- predict(modFit_gbm, testing)
+cm_gbm <- confusionMatrix(data=predict_gbm, reference=as.factor(testing$classe))
+cm_gbm$overall["Accuracy"]
+cm_gbm$table
+```
+## Final Model Selection
+
+Following is the overall accuracy results for the three models, against the testing data set:
+
+     Basic Classification Tree          0.937
+     Random Forest                      0.995
+     Stochastic Gradient Boosting       0.961
+
+Thus, the Random Forest algorithm is most accurate against the testing data set, correctly classifying 
+5,851 observations and misclassifying 39 observations. The Random Forest algorithm correctly classified all Class D observations (lowering the dumbbell only halfway) with misclassifing 21 Class C (lifting the dumbbell only halfway) observations as Class D. 
+
+Lastly, Principal Component Analysis was used to select the 12 principal components (0.80 threshold for variance) and see if the principal components improved the model. However, the results show a slight decrease in accuracy of 0.9630 (reduction of 0.322 from earlier Random Forest).
+
+```{r }
+
+# Generate principal components and transform the training and testing data sets
+preProc = preProcess(training, method=c("center", "scale", "pca"),
+                     thresh = 0.80)
+training_PCA <- predict(preProc, training)
+testing_PCA <- predict(preProc, testing)
+
+# Random Forest using PCA reduced data
+modFit_rfpca <- train(classe ~., method="rf", data=training_PCA)
+# Perform prediction
+predict_rfPCA <- predict(modFit_rfpca, testing_PCA)
+cm_rfPCA <- confusionMatrix(data=predict_rfPCA, reference=as.factor(testing$classe))
+cm_rfPCA$overall["Accuracy"]
+cm_rfPCA$table
+
+```
+
+## Prediciton on Validation Set 
+
+Finally, the Random Forest model yields the following results on the 20 observations in the validation set (data unseen during the model training and evaluation process).  The model was able to correctly classify all 20 observations. 
+
+```{r}
+
+# Perform prediction on validation set
+predict_validation <- predict(modFit_rf, validation_set)
+predict_validation
+
+```
+#### References
+[http://topepo.github.io/caret/available-models.html]http://topepo.github.io/caret/available-models.html
+[http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har]http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har 
