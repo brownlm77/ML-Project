@@ -149,8 +149,7 @@ Following is the overall accuracy results for the three models, against the test
      Random Forest                      0.995
      Stochastic Gradient Boosting       0.961
 
-Thus, the Random Forest algorithm is most accurate against the testing data set, correctly classifying 
-5,851 observations and misclassifying 39 observations. The Random Forest algorithm correctly classified all Class D observations (lowering the dumbbell only halfway) with misclassifing 21 Class C (lifting the dumbbell only halfway) observations as Class D. 
+Thus, the Random Forest algorithm is most accurate against the testing data set, correctly classifying 5,851 observations and misclassifying 39 observations. The Random Forest algorithm correctly classified all Class D observations (lowering the dumbbell only halfway) with misclassifing 21 Class C (lifting the dumbbell only halfway) observations as Class D. 
 
 Lastly, Principal Component Analysis was used to select the 12 principal components (0.80 threshold for variance) and see if the principal components improved the model. However, the results show a slight decrease in accuracy of 0.9630 (reduction of 0.322 from earlier Random Forest).
 
@@ -172,7 +171,7 @@ cm_rfPCA$table
 
 ```
 
-## Prediciton on Validation Set 
+## Prediction on Validation Set 
 
 Finally, the Random Forest model yields the following results on the 20 observations in the validation set (data unseen during the model training and evaluation process).  The model was able to correctly classify all 20 observations. 
 
